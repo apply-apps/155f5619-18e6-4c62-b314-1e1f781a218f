@@ -2,158 +2,153 @@
 // Combined code from all files
 
 import React, { useState, useEffect, useRef } from 'react';
-import { SafeAreaView, StyleSheet, View, Text, Button, Dimensions } from 'react-native';
+import { SafeAreaView, StyleSheet, View, Text, Button, Alert } from 'react-native';
 
-const CELL_SIZE = 20;
-const GRID_SIZE = 15;
-const INITIAL_POSITION = { x: 5, y: 5 };
+const GRID_SIZE = 20;
+const CELL_SIZE = 15;
+const DIRECTIONS = {
+    UP: { x: 0, y: -1 },
+    DOWN: { x: 0, y: 1 },
+    LEFT: { x: -1, y: 0 },
+    RIGHT: { x: 1, y: 0 }
+};
 
 const getRandomPosition = () => ({
     x: Math.floor(Math.random() * GRID_SIZE),
-    y: Math.floor(Math.random() * GRID_SIZE)
+    y: Math.floor(Math.random() * GRID_SIZE),
 });
 
-const App = () => {
-    const [snake, setSnake] = useState([INITIAL_POSITION]);
-    const [direction, setDirection] = useState({ x: 1, y: 0 });
+export default function App() {
+    const [snake, setSnake] = useState([{ x: 2, y: 2 }]);
     const [food, setFood] = useState(getRandomPosition());
-    const [isGameOver, setIsGameOver] = useState(false);
-    const intervalRef = useRef();
+    const [direction, setDirection] = useState(DIRECTIONS.RIGHT);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const timerRef = useRef(null);
 
     useEffect(() => {
-        const handleKeyPress = (e) => {
-            switch (e.key) {
-                case 'ArrowUp':
-                    setDirection({ x: 0, y: -1 });
+        if (isPlaying) {
+            timerRef.current = setInterval(moveSnake, 200);
+        } else {
+            clearInterval(timerRef.current);
+        }
+        return () => clearInterval(timerRef.current);
+    }, [isPlaying, direction]);
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            switch (e.keyCode) {
+                case 37:
+                    setDirection(DIRECTIONS.LEFT);
                     break;
-                case 'ArrowDown':
-                    setDirection({ x: 0, y: 1 });
+                case 38:
+                    setDirection(DIRECTIONS.UP);
                     break;
-                case 'ArrowLeft':
-                    setDirection({ x: -1, y: 0 });
+                case 39:
+                    setDirection(DIRECTIONS.RIGHT);
                     break;
-                case 'ArrowRight':
-                    setDirection({ x: 1, y: 0 });
+                case 40:
+                    setDirection(DIRECTIONS.DOWN);
                     break;
             }
         };
-
-        window.addEventListener('keydown', handleKeyPress);
-        return () => window.removeEventListener('keydown', handleKeyPress);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    useEffect(() => {
-        if (!isGameOver) {
-            intervalRef.current = setInterval(moveSnake, 200);
-            return () => clearInterval(intervalRef.current);
-        }
-    }, [direction, isGameOver]);
-
     const moveSnake = () => {
-        const newHead = {
-            x: snake[0].x + direction.x,
-            y: snake[0].y + direction.y
-        };
+        let newSnake = [...snake];
+        let head = { ...newSnake[0] };
+        head.x += direction.x;
+        head.y += direction.y;
 
-        if (
-            newHead.x >= GRID_SIZE ||
-            newHead.x < 0 ||
-            newHead.y >= GRID_SIZE ||
-            newHead.y < 0 ||
-            snake.some(segment => segment.x === newHead.x && segment.y === newHead.y)
-        ) {
-            setIsGameOver(true);
-            return;
-        }
-
-        const newSnake = [newHead, ...snake];
-        if (newHead.x === food.x && newHead.y === food.y) {
+        if (head.x === food.x && head.y === food.y) {
+            newSnake.push({});
             setFood(getRandomPosition());
         } else {
             newSnake.pop();
         }
+
+        if (checkCollision(head, newSnake)) {
+            Alert.alert('Game Over');
+            setIsPlaying(false);
+            setSnake([{ x: 2, y: 2 }]);
+            setDirection(DIRECTIONS.RIGHT);
+            return;
+        }
+
+        newSnake.unshift(head);
         setSnake(newSnake);
     };
 
-    const resetGame = () => {
-        setSnake([INITIAL_POSITION]);
-        setDirection({ x: 1, y: 0 });
-        setFood(getRandomPosition());
-        setIsGameOver(false);
+    const checkCollision = (head, newSnake) => {
+        if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
+            return true;
+        }
+        for (let segment of newSnake) {
+            if (segment.x === head.x && segment.y === head.y) {
+                return true;
+            }
+        }
+        return false;
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            {isGameOver ? (
-                <View style={styles.gameOverContainer}>
-                    <Text style={styles.gameOverText}>Game Over</Text>
-                    <Button title="Restart" onPress={resetGame} />
-                </View>
-            ) : (
-                <View>
-                    <View style={styles.grid}>
-                        {Array.from({ length: GRID_SIZE }).map((_, row) =>
-                            Array.from({ length: GRID_SIZE }).map((_, col) => (
-                                <View
-                                    key={`cell-${row}-${col}`}
-                                    style={[
-                                        styles.cell,
-                                        snake.some(segment => segment.x === col && segment.y === row) && styles.snake,
-                                        food.x === col && food.y === row && styles.food
-                                    ]}
-                                />
-                            ))
-                        )}
+            <Text style={styles.title}>Snake Game</Text>
+            <Button title={isPlaying ? "Stop" : "Start"} onPress={() => setIsPlaying(!isPlaying)} />
+            <View style={styles.grid}>
+                {Array.from({ length: GRID_SIZE }).map((_, rowIndex) => (
+                    <View style={styles.row} key={rowIndex}>
+                        {Array.from({ length: GRID_SIZE }).map((_, columnIndex) => (
+                            <View
+                                style={[
+                                    styles.cell,
+                                    snake.some(segment => segment.x === columnIndex && segment.y === rowIndex) && styles.snake,
+                                    food.x === columnIndex && food.y === rowIndex && styles.food
+                                ]}
+                                key={columnIndex}
+                            />
+                        ))}
                     </View>
-                    <Text style={styles.infoText}>
-                        Use arrow keys to move the snake. Eat the food to grow!
-                    </Text>
-                </View>
-            )}
+                ))}
+            </View>
         </SafeAreaView>
     );
-};
+}
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 20,
+        marginTop: 32
+    },
+    title: {
+        fontSize: 20,
+        marginBottom: 20,
+        fontWeight: 'bold'
     },
     grid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
         width: GRID_SIZE * CELL_SIZE,
-        height: GRID_SIZE * CELL_SIZE,
-        borderColor: '#000',
-        borderWidth: 1,
-        backgroundColor: '#EAF6F6'
+        height: (GRID_SIZE + 2) * CELL_SIZE,
+        backgroundColor: '#FAFAFA',
+        borderWidth: 5,
+        borderColor: '#333',
+    },
+    row: {
+        flexDirection: 'row',
     },
     cell: {
         width: CELL_SIZE,
         height: CELL_SIZE,
-        borderColor: '#ccc',
-        borderWidth: 0.5
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#DDDDDD'
     },
     snake: {
-        backgroundColor: '#4ECB71'
+        backgroundColor: '#3DBF46'
     },
     food: {
-        backgroundColor: '#FF4F4F'
-    },
-    gameOverContainer: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    gameOverText: {
-        fontSize: 24,
-        marginBottom: 20,
-    },
-    infoText: {
-        marginTop: 20,
-        textAlign: 'center',
-    },
+        backgroundColor: '#FF0000'
+    }
 });
-
-export default App;
